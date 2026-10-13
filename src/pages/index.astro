@@ -12,14 +12,20 @@ import ContactPage from '../components/ContactPage.astro';
           <a class="wordmark" href="#conteudo" aria-label="VemMED, início">
             <img src="/assets/logo-vemmed.svg" alt="VemMED" />
           </a>
-          <p class="eyebrow"><span class="eyebrow__dot" aria-hidden="true"></span> ACESSO AO APLICATIVO · ENEM 2025</p>
+          <p class="page-badge">5 MAIS ACERTADAS E 5 MAIS ERRADAS DO ENEM 2025</p>
           <h1 id="hero-title">As 5 questões mais acertadas e as 5 mais erradas do ENEM 2025.</h1>
-          <p class="hero__lead">Preencha seus dados para solicitar acesso ao aplicativo sobre as questões mais e menos acertadas do ENEM.</p>
+          <p class="hero__lead">Conheça as 5 questões mais acertadas e as 5 mais erradas do ENEM 2025 e experimente resolvê-las. Uma oportunidade para observar como você lida com diferentes questões e reconhecer o que merece atenção na sua revisão.</p>
+          <div class="hero__access" role="note" aria-label="Acesso gratuito">
+            <span class="hero__access-check" aria-hidden="true">✓</span>
+            <div>
+              <p class="hero__access-title">Acesso gratuito.</p>
+              <p class="hero__access-description">Solicite a liberação pelo formulário.</p>
+            </div>
+          </div>
         </div>
         <aside class="capture-panel" id="cadastro" aria-labelledby="panel-title">
           <p class="capture-panel__eyebrow">ACESSO AO APLICATIVO</p>
-          <h2 id="panel-title">Libere seu acesso</h2>
-          <p class="capture-panel__description">Informe seus dados para solicitar acesso ao aplicativo do ENEM 2025.</p>
+          <p class="capture-panel__description" id="panel-title">Solicite acesso ao guia e prepare sua próxima revisão para o ENEM.</p>
           <ContactPage />
         </aside>
       </div>
