@@ -1,14 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { BUBBLE_ENDPOINT, createBubblePayload, attachBubbleSubmission } from '../src/scripts/bubble-form.js';
-
-const component = readFileSync(new URL('../src/components/ContactPage.astro', import.meta.url), 'utf8');
-const product = component.match(/integrateBubbleForm\('([^']+)'\)/)[1];
 
 function fixture({ request, valid = true, sdkValid = true } = {}) {
   const inputs = Object.fromEntries(Object.entries({
-    nome_completo1: ' Ana ', sobrenome: ' Souza ', email: ' ana@example.com ', telefone: '(11) 98765-4321',
+    nome_completo1: ' Ana ', sobrenome: ' Souza Lima ', email: ' ana@example.com ', telefone: '(11) 98765-4321',
   }).map(([key, value]) => [`mauticform[${key}]`, { value, readOnly: false }]));
   const button = { disabled: false, innerHTML: 'Liberar Acesso', textContent: '' };
   const error = { textContent: '', setAttribute() {} };
@@ -25,7 +21,7 @@ function fixture({ request, valid = true, sdkValid = true } = {}) {
   const callbacks = {};
   const sdk = { validateForm: (_name, send) => { calls.push(send); return sdkValid; } };
   const requests = [];
-  attachBubbleSubmission(form, product, {
+  attachBubbleSubmission(form, {
     sdk, callbacks,
     request: async (...args) => {
       requests.push(args);
@@ -38,22 +34,22 @@ function fixture({ request, valid = true, sdkValid = true } = {}) {
   };
 }
 
-test('payload has exactly the five agreed fields and the actual page product', () => {
+test('payload sends name, full surname, email and phone without product', () => {
   const f = fixture();
-  assert.deepEqual(createBubblePayload(f.form, product), {
-    nome: 'Ana', email: 'ana@example.com', celular: '11987654321', produto: product, sobrenome: 'Souza',
+  assert.deepEqual(createBubblePayload(f.form), {
+    nome: 'Ana', email: 'ana@example.com', celular: '11987654321', sobrenome: 'Souza Lima',
   });
-  assert.ok(['Testlets', 'Temas que mais caem', 'Simulado VemMED', '5 mais acertadas e 5 mais erradas do ENEM 2025'].includes(product));
 });
 
 test('POST JSON to Bubble before handing off to Mautic', async () => {
   const f = fixture();
   await f.submit();
   const [url, options] = f.requests[0];
+  assert.equal(BUBBLE_ENDPOINT, 'https://flashmedradarquestoes.bubbleapps.io/api/1.1/wf/sign_up_5q5q');
   assert.equal(url, BUBBLE_ENDPOINT);
   assert.equal(options.method, 'POST');
   assert.equal(options.headers['Content-Type'], 'application/json');
-  assert.deepEqual(JSON.parse(options.body), createBubblePayload(f.form, product));
+  assert.deepEqual(JSON.parse(options.body), createBubblePayload(f.form));
   assert.deepEqual(f.calls, [false, true]);
 });
 
@@ -116,3 +112,62 @@ test('retry after a Mautic response error does not duplicate confirmed Bubble da
   assert.deepEqual(f.calls, [false, true, false, true]);
 });
 
+test('successful redirect preserves destination, query and fragment and encodes the submitted email', async () => {
+  const f = fixture();
+  f.inputs['mauticform[email]'].value = ' ana+isca@example.com ';
+  await f.submit();
+  f.inputs['mauticform[email]'].value = '';
+  const response = { success: true, redirect: 'https://spp.vemmed.com/produto?origem=isca&email=antigo#conteudo' };
+  f.callbacks.isca.onResponseStart(response);
+  assert.equal(response.redirect, 'https://spp.vemmed.com/produto?origem=isca&email=ana%2Bisca%40example.com#conteudo');
+  assert.equal(new URL(response.redirect).searchParams.getAll('email').length, 1);
+});
+
+test('relative redirects resolve against the page address', async () => {
+  const f = fixture();
+  f.form.ownerDocument = { baseURI: 'https://captura.example.com/cadastro/' };
+  await f.submit();
+  const response = { success: true, redirect: '/obrigado?produto=isca' };
+  f.callbacks.isca.onResponseStart(response);
+  assert.equal(response.redirect, 'https://captura.example.com/obrigado?produto=isca&email=ana%40example.com');
+});
+
+test('failed or unconfirmed Mautic responses keep the original redirect unchanged', async () => {
+  const f = fixture();
+  await f.submit();
+  for (const fields of [
+    { success: false },
+    { success: 0 },
+    { success: true, errorMessage: 'Erro' },
+    { success: true, validationErrors: { email: 'Inválido' } },
+    {},
+  ]) {
+    const response = { ...fields, redirect: 'https://spp.vemmed.com/produto' };
+    f.callbacks.isca.onResponseStart(response);
+    assert.equal(response.redirect, 'https://spp.vemmed.com/produto');
+  }
+});
+
+test('no redirect is invented when Mautic has no destination configured', async () => {
+  const f = fixture();
+  await f.submit();
+  const response = { success: true };
+  f.callbacks.isca.onResponseStart(response);
+  assert.equal(response.redirect, undefined);
+});
+
+test('email is not added without confirmed Bubble delivery', () => {
+  const f = fixture();
+  const response = { success: true, redirect: 'https://spp.vemmed.com/produto' };
+  f.callbacks.isca.onResponseStart(response);
+  assert.equal(response.redirect, 'https://spp.vemmed.com/produto');
+});
+
+
+test('Mautic numeric success adds email to the thank-you URL', async () => {
+  const f = fixture();
+  await f.submit();
+  const response = { success: 1, redirect: 'https://example.com/obrigado' };
+  f.callbacks.isca.onResponseStart(response);
+  assert.equal(response.redirect, 'https://example.com/obrigado?email=ana%40example.com');
+});
